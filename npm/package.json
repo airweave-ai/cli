@@ -1,0 +1,22 @@
+{
+  "name": "airweave-cli",
+  "version": "0.1.0",
+  "description": "Airweave CLI for developers and AI agents. Search across your connected sources from any terminal.",
+  "keywords": ["airweave", "cli", "search", "ai", "agents"],
+  "homepage": "https://github.com/airweave-ai/cli",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/airweave-ai/cli.git"
+  },
+  "license": "MIT",
+  "bin": {
+    "airweave": "./bin/airweave.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "files": [
+    "bin/",
+    "install.js"
+  ]
+}
