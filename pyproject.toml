@@ -1,0 +1,57 @@
+[project]
+name = "airweave-cli"
+
+[tool.poetry]
+name = "airweave-cli"
+version = "0.1.0"
+description = "The Airweave CLI for developers and AI agents."
+readme = "README.md"
+license = "MIT"
+authors = ["Airweave <hello@airweave.ai>"]
+keywords = ["airweave", "cli", "search", "ai", "agents"]
+
+classifiers = [
+    "Intended Audience :: Developers",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+packages = [
+    { include = "airweave_cli" }
+]
+
+[project.urls]
+Repository = "https://github.com/airweave-ai/cli"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+typer = {version = "^0.12", extras = ["all"]}
+rich = "^13"
+airweave-sdk = ">=0.9"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+ruff = ">=0.11"
+
+[tool.poetry.scripts]
+airweave = "airweave_cli.main:app"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
