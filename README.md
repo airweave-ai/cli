@@ -2,7 +2,7 @@
 
 [![pypi](https://img.shields.io/pypi/v/airweave-cli)](https://pypi.python.org/pypi/airweave-cli)
 
-A command-line interface for [Airweave](https://airweave.ai): search across your connected sources from any terminal. Built for developers and AI agents.
+A command-line interface for [Airweave](https://airweave.ai). Search across your connected sources from any terminal. Built for developers and AI agents.
 
 ## Installation
 
