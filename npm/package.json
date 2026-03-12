@@ -1,6 +1,6 @@
 {
-  "name": "airweave-cli",
-  "version": "0.1.1",
+  "name": "@airweave/cli",
+  "version": "0.1.2",
   "description": "Airweave CLI for developers and AI agents. Search across your connected sources from any terminal.",
   "keywords": ["airweave", "cli", "search", "ai", "agents"],
   "homepage": "https://github.com/airweave-ai/cli",
