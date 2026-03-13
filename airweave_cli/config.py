@@ -5,8 +5,6 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import typer
-
 CONFIG_DIR = Path.home() / ".airweave"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
@@ -33,12 +31,9 @@ def clear_config() -> None:
         CONFIG_PATH.unlink()
 
 
-def _fail(message: str) -> None:
-    typer.echo(message, err=True)
-    raise typer.Exit(code=1)
-
-
 def resolve_api_key() -> str:
+    from airweave_cli.lib.output import output_error
+
     key = os.environ.get("AIRWEAVE_API_KEY")
     if key:
         return key
@@ -48,8 +43,11 @@ def resolve_api_key() -> str:
     if key:
         return key
 
-    _fail("No API key found. Set AIRWEAVE_API_KEY or run: airweave auth login")
-    return ""  # unreachable, keeps type checkers happy
+    output_error(
+        "No API key found. Set AIRWEAVE_API_KEY or run: airweave auth login",
+        code="no_api_key",
+    )
+    return ""  # unreachable
 
 
 def resolve_base_url() -> str:
@@ -66,6 +64,8 @@ def resolve_base_url() -> str:
 
 
 def resolve_collection(flag: Optional[str] = None) -> str:
+    from airweave_cli.lib.output import output_error
+
     if flag:
         return flag
 
@@ -78,11 +78,12 @@ def resolve_collection(flag: Optional[str] = None) -> str:
     if coll:
         return coll
 
-    _fail(
+    output_error(
         "No collection specified. Use --collection, set AIRWEAVE_COLLECTION, "
-        "or run: airweave auth login"
+        "or run: airweave auth login",
+        code="missing_collection",
     )
-    return ""
+    return ""  # unreachable
 
 
 def get_http_client():
@@ -93,6 +94,8 @@ def get_http_client():
     available (env var or config).
     """
     import httpx
+
+    from airweave_cli.lib.output import output_error
 
     cfg = load_config()
     base_url = resolve_base_url()
@@ -109,7 +112,7 @@ def get_http_client():
     elif api_key:
         headers["X-API-Key"] = api_key
     else:
-        _fail("No credentials found. Run: airweave auth login")
+        output_error("No credentials found. Run: airweave auth login", code="no_credentials")
 
     return httpx.Client(base_url=base_url, headers=headers, timeout=30)
 

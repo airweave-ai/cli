@@ -12,6 +12,11 @@ app = typer.Typer(
     name="airweave",
     help="Airweave CLI — search across your connected sources.",
     no_args_is_help=True,
+    rich_markup_mode="rich",
+    epilog=(
+        "[dim]Environment:[/dim]  AIRWEAVE_API_KEY · AIRWEAVE_BASE_URL · AIRWEAVE_COLLECTION\n\n"
+        "[dim]Output:[/dim]  Human-friendly by default. JSON when piped or with --json."
+    ),
 )
 
 
@@ -23,6 +28,7 @@ def _version_callback(value: bool) -> None:
 
 @app.callback()
 def main(
+    ctx: typer.Context,
     version: bool = typer.Option(
         False,
         "--version",
@@ -31,8 +37,21 @@ def main(
         callback=_version_callback,
         is_eager=True,
     ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Force JSON output (default when stdout is piped).",
+    ),
+    quiet: bool = typer.Option(
+        False,
+        "--quiet",
+        "-q",
+        help="Suppress spinners and interactive output; implies --json.",
+    ),
 ) -> None:
-    pass
+    ctx.ensure_object(dict)
+    ctx.obj["json"] = json_output or quiet
+    ctx.obj["quiet"] = quiet
 
 
 app.add_typer(auth_app, name="auth")
