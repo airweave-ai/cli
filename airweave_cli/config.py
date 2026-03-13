@@ -18,7 +18,7 @@ AUTH0_CONFIGS = {
     },
     "https://api.airweave.ai": {
         "domain": "airweave.eu.auth0.com",
-        "client_id": "",
+        "client_id": "HgVX5NneBER4VgGNQD0NKpyWBaPE2JMs",
         "audience": "https://app.airweave.ai/",
     },
 }
