@@ -8,7 +8,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from airweave_cli.config import get_client, serialize
+from airweave_cli.config import get_http_client
 
 app = typer.Typer(name="collections", help="Manage collections.", no_args_is_help=True)
 
@@ -28,15 +28,17 @@ def list_collections(
     ),
 ) -> None:
     """List all collections."""
-    client = get_client()
+    client = get_http_client()
     try:
-        collections = client.collections.list()
+        resp = client.get("/collections/")
+        resp.raise_for_status()
+        collections = resp.json()
     except Exception as exc:
         stderr.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(code=1)
 
     if format == OutputFormat.json:
-        typer.echo(json.dumps(serialize(collections), indent=2, default=str))
+        typer.echo(json.dumps(collections, indent=2, default=str))
         return
 
     if not collections:
@@ -51,10 +53,10 @@ def list_collections(
 
     for c in collections:
         table.add_row(
-            c.name,
-            c.readable_id,
-            str(c.status) if c.status else "-",
-            c.created_at.strftime("%Y-%m-%d %H:%M") if c.created_at else "-",
+            c.get("name", ""),
+            c.get("readable_id", ""),
+            c.get("status", "-"),
+            (c.get("created_at") or "-")[:16],
         )
 
     stdout.print(table)
@@ -71,22 +73,26 @@ def create(
     ),
 ) -> None:
     """Create a new collection."""
-    client = get_client()
-    kwargs = {"name": name}
+    client = get_http_client()
+    body: dict = {"name": name}
     if readable_id:
-        kwargs["readable_id"] = readable_id
+        body["readable_id"] = readable_id
 
     try:
-        collection = client.collections.create(**kwargs)
+        resp = client.post("/collections/", json=body)
+        resp.raise_for_status()
+        collection = resp.json()
     except Exception as exc:
         stderr.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(code=1)
 
     if format == OutputFormat.json:
-        typer.echo(json.dumps(serialize(collection), indent=2, default=str))
+        typer.echo(json.dumps(collection, indent=2, default=str))
         return
 
-    stdout.print(f"[green]Created:[/green] {collection.name} ({collection.readable_id})")
+    stdout.print(
+        f"[green]Created:[/green] {collection['name']} ({collection['readable_id']})"
+    )
 
 
 @app.command()
@@ -97,20 +103,22 @@ def get(
     ),
 ) -> None:
     """Get details of a collection."""
-    client = get_client()
+    client = get_http_client()
     try:
-        collection = client.collections.get(readable_id)
+        resp = client.get(f"/collections/{readable_id}")
+        resp.raise_for_status()
+        collection = resp.json()
     except Exception as exc:
         stderr.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(code=1)
 
     if format == OutputFormat.json:
-        typer.echo(json.dumps(serialize(collection), indent=2, default=str))
+        typer.echo(json.dumps(collection, indent=2, default=str))
         return
 
-    stdout.print(f"[bold]{collection.name}[/bold]  ({collection.readable_id})")
-    stdout.print(f"  ID:        {collection.id}")
-    stdout.print(f"  Status:    {collection.status}")
-    stdout.print(f"  Vectors:   {collection.vector_size}d ({collection.embedding_model_name})")
-    stdout.print(f"  Created:   {collection.created_at}")
-    stdout.print(f"  Modified:  {collection.modified_at}")
+    stdout.print(f"[bold]{collection['name']}[/bold]  ({collection['readable_id']})")
+    stdout.print(f"  ID:        {collection['id']}")
+    stdout.print(f"  Status:    {collection.get('status', '-')}")
+    stdout.print(f"  Vectors:   {collection.get('vector_size', '-')}d ({collection.get('embedding_model_name', '-')})")
+    stdout.print(f"  Created:   {collection.get('created_at', '-')}")
+    stdout.print(f"  Modified:  {collection.get('modified_at', '-')}")

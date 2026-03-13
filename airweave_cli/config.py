@@ -48,9 +48,7 @@ def resolve_api_key() -> str:
     if key:
         return key
 
-    _fail(
-        "No API key found. Set AIRWEAVE_API_KEY or run: airweave auth login"
-    )
+    _fail("No API key found. Set AIRWEAVE_API_KEY or run: airweave auth login")
     return ""  # unreachable, keeps type checkers happy
 
 
@@ -87,7 +85,37 @@ def resolve_collection(flag: Optional[str] = None) -> str:
     return ""
 
 
+def get_http_client():
+    """Return an httpx client authenticated with the stored access token.
+
+    Sends ``Authorization: Bearer <token>`` and ``X-Organization-ID`` headers
+    on every request.  Falls back to ``X-API-Key`` when only an API key is
+    available (env var or config).
+    """
+    import httpx
+
+    cfg = load_config()
+    base_url = resolve_base_url()
+
+    token = cfg.get("access_token")
+    org_id = cfg.get("organization_id")
+    api_key = os.environ.get("AIRWEAVE_API_KEY") or cfg.get("api_key")
+
+    headers: Dict[str, str] = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+        if org_id:
+            headers["X-Organization-ID"] = org_id
+    elif api_key:
+        headers["X-API-Key"] = api_key
+    else:
+        _fail("No credentials found. Run: airweave auth login")
+
+    return httpx.Client(base_url=base_url, headers=headers, timeout=30)
+
+
 def get_client():
+    """Legacy helper — returns an AirweaveSDK client (requires an API key)."""
     from airweave import AirweaveSDK
 
     return AirweaveSDK(

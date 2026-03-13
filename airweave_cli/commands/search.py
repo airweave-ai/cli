@@ -10,7 +10,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
 
-from airweave_cli.config import get_client, resolve_collection, serialize
+from airweave_cli.config import get_http_client, resolve_collection
 
 stderr = Console(stderr=True)
 stdout = Console()
@@ -36,31 +36,31 @@ def search(
     Pipe JSON output directly:  airweave search "query" | jq '.results[0]'
     """
     coll = resolve_collection(collection)
-    client = get_client()
+    client = get_http_client()
 
     try:
-        from airweave import SearchRequest
-
-        response = client.collections.search(
-            coll,
-            request=SearchRequest(query=query, limit=top_k),
+        resp = client.post(
+            f"/collections/{coll}/search",
+            json={"query": query, "limit": top_k},
         )
+        resp.raise_for_status()
+        response = resp.json()
     except Exception as exc:
         stderr.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(code=1)
 
     if format == OutputFormat.json:
-        typer.echo(json.dumps(serialize(response), indent=2, default=str))
+        typer.echo(json.dumps(response, indent=2, default=str))
         return
 
-    # Rich text output
-    results = response.results
+    results = response.get("results", [])
     if not results:
         stderr.print("[yellow]No results found.[/yellow]")
         raise typer.Exit(code=0)
 
-    if response.completion:
-        stdout.print(Panel(Markdown(response.completion), title="Answer", border_style="green"))
+    completion = response.get("completion")
+    if completion:
+        stdout.print(Panel(Markdown(completion), title="Answer", border_style="green"))
         stdout.print()
 
     for i, result in enumerate(results, 1):

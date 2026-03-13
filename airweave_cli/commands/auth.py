@@ -62,9 +62,7 @@ def login() -> None:
 
 @app.command()
 def status(
-    format: OutputFormat = typer.Option(
-        OutputFormat.text, "--format", "-f", help="Output format."
-    ),
+    format: OutputFormat = typer.Option(OutputFormat.text, "--format", "-f", help="Output format."),
 ) -> None:
     """Show current authentication state."""
     env_key = os.environ.get("AIRWEAVE_API_KEY")
