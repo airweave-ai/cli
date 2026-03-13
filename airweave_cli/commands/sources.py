@@ -170,6 +170,9 @@ def sync(
         typer.echo(json.dumps(job, indent=2, default=str))
         return
 
+    job_id = job.get("id", "")
+    status = job.get("status", "")
     stdout.print(
-        f"[green]Sync started.[/green]  Job ID: {job.get('id', '')}  Status: {job.get('status', '')}"
+        f"[green]Sync started.[/green]  Job ID: {job_id}"
+        f"  Status: {status}"
     )
