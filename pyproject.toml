@@ -1,6 +1,3 @@
-[project]
-name = "airweave-cli"
-
 [tool.poetry]
 name = "airweave-cli"
 version = "0.1.2"
@@ -27,7 +24,7 @@ packages = [
     { include = "airweave_cli" }
 ]
 
-[project.urls]
+[tool.poetry.urls]
 Repository = "https://github.com/airweave-ai/cli"
 
 [tool.poetry.dependencies]
