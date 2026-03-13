@@ -19,8 +19,9 @@ from airweave_cli.config import (
     save_config,
 )
 from airweave_cli.lib.output import output_error, output_result, should_output_json
-from airweave_cli.lib.prompts import confirm_action, require_password, require_text
+from airweave_cli.lib.prompts import confirm_action, require_password, require_select, require_text
 from airweave_cli.lib.spinner import with_spinner
+from airweave_cli.lib.tty import is_interactive
 
 app = typer.Typer(
     name="auth",
@@ -67,7 +68,7 @@ def _bearer(token: str) -> Dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def _device_code_flow(base_url: str, *, quiet: bool = False) -> str:
+def _device_code_flow(base_url: str, *, quiet: bool = False, json_flag: bool = False) -> str:
     """Run Auth0 Device Code grant. Returns the access token."""
     auth0 = resolve_auth0_config(base_url)
 
@@ -91,7 +92,7 @@ def _device_code_flow(base_url: str, *, quiet: bool = False) -> str:
 
     if not quiet:
         stderr.print()
-        stderr.print(f"  Open this URL to sign in:\n")
+        stderr.print("  Open this URL to sign in:\n")
         stderr.print(f"    [bold cyan]{verification_url}[/bold cyan]\n")
         stderr.print(f"  Your code: [bold]{user_code}[/bold]\n")
 
@@ -131,17 +132,23 @@ def _device_code_flow(base_url: str, *, quiet: bool = False) -> str:
                 continue
             elif error == "expired_token":
                 stderr.print("\n")
-                output_error("Authentication timed out.", code="auth_timeout")
+                output_error(
+                    "Authentication timed out.", code="auth_timeout", json_flag=json_flag
+                )
             elif error == "access_denied":
                 stderr.print("\n")
-                output_error("Authentication was denied.", code="auth_denied")
+                output_error(
+                    "Authentication was denied.", code="auth_denied", json_flag=json_flag
+                )
             else:
                 stderr.print("\n")
-                output_error(f"Unexpected error: {error}", code="auth_error")
+                output_error(
+                    f"Unexpected error: {error}", code="auth_error", json_flag=json_flag
+                )
 
     if not access_token:
         stderr.print("\n")
-        output_error("Authentication timed out.", code="auth_timeout")
+        output_error("Authentication timed out.", code="auth_timeout", json_flag=json_flag)
 
     if not quiet:
         stderr.print(" done!")
@@ -163,7 +170,9 @@ def _ensure_user(base_url: str, token: str, email: str) -> None:
         )
 
 
-def _list_organizations(base_url: str, token: str, email: str) -> List[Dict[str, Any]]:
+def _list_organizations(
+    base_url: str, token: str, email: str, *, json_flag: bool = False
+) -> List[Dict[str, Any]]:
     with httpx.Client(timeout=30) as http:
         resp = http.get(
             f"{base_url.rstrip('/')}/organizations/",
@@ -182,11 +191,14 @@ def _list_organizations(base_url: str, token: str, email: str) -> List[Dict[str,
         output_error(
             f"Failed to list organizations ({resp.status_code}): {resp.text}",
             code="org_list_failed",
+            json_flag=json_flag,
         )
     return resp.json()
 
 
-def _create_organization(base_url: str, token: str, name: str) -> Dict[str, Any]:
+def _create_organization(
+    base_url: str, token: str, name: str, *, json_flag: bool = False
+) -> Dict[str, Any]:
     with httpx.Client(timeout=30) as http:
         resp = http.post(
             f"{base_url.rstrip('/')}/organizations/",
@@ -197,6 +209,7 @@ def _create_organization(base_url: str, token: str, name: str) -> Dict[str, Any]
         output_error(
             f"Failed to create organization ({resp.status_code}): {resp.text}",
             code="org_create_failed",
+            json_flag=json_flag,
         )
     return resp.json()
 
@@ -204,36 +217,34 @@ def _create_organization(base_url: str, token: str, name: str) -> Dict[str, Any]
 def _select_or_create_org(
     base_url: str, token: str, email: str, *, json_flag: bool = False
 ) -> Dict[str, Any]:
-    orgs = _list_organizations(base_url, token, email)
+    orgs = _list_organizations(base_url, token, email, json_flag=json_flag)
 
     if orgs:
         if len(orgs) == 1:
             stderr.print(f"\n  Auto-selected [bold]{orgs[0]['name']}[/bold] (only organization).\n")
             return orgs[0]
 
-        stderr.print()
-        stderr.print("  [bold]Select an organization:[/bold]\n")
-        for i, org in enumerate(orgs, 1):
-            role = org.get("role", "")
-            stderr.print(f"    {i}. {org['name']}  [dim]({role})[/dim]")
-        stderr.print()
+        options = [
+            (str(i), f"{org['name']}  ({org.get('role', '')})")
+            for i, org in enumerate(orgs)
+        ]
 
-        raw = typer.prompt("  Choice", default="1")
-        try:
-            choice = int(raw)
-            if choice < 1 or choice > len(orgs):
-                raise ValueError
-        except ValueError:
-            output_error("Invalid choice.", code="invalid_choice", json_flag=json_flag)
+        choice = require_select(
+            None,
+            options=options,
+            prompt_msg="Select an organization:",
+            flag="org",
+            json_flag=json_flag,
+        )
 
-        selected = orgs[choice - 1]
+        selected = orgs[int(choice)]
         stderr.print(f"  Organization set to [bold]{selected['name']}[/bold].\n")
         return selected
 
     stderr.print()
     stderr.print("  No organizations found. Let's create one.\n")
     name = require_text(None, prompt_msg="Organization name:", flag="org-name", json_flag=json_flag)
-    org = _create_organization(base_url, token, name)
+    org = _create_organization(base_url, token, name, json_flag=json_flag)
     stderr.print(f"\n  Created organization [bold]{org['name']}[/bold].\n")
     return org
 
@@ -280,7 +291,15 @@ def _login_with_browser(
     json_flag: bool = False,
     quiet: bool = False,
 ) -> None:
-    token = _device_code_flow(base_url, quiet=quiet)
+    if not is_interactive():
+        output_error(
+            "Browser login requires an interactive terminal. "
+            "Set AIRWEAVE_API_KEY in your environment, or use: airweave auth login --api-key",
+            code="not_interactive",
+            json_flag=json_flag,
+        )
+
+    token = _device_code_flow(base_url, quiet=quiet, json_flag=json_flag)
     claims = _extract_jwt_claims(token)
     email = _email_from_claims(claims) or ""
 
