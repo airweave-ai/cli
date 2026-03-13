@@ -10,6 +10,46 @@ CONFIG_PATH = CONFIG_DIR / "config.json"
 
 DEFAULT_BASE_URL = "https://api.airweave.ai"
 
+AUTH0_CONFIGS = {
+    "https://api.dev-airweave.com": {
+        "domain": "airweave-dev.eu.auth0.com",
+        "client_id": "o83t21A8QlD3okF7mq27Vm2xVV0Ual51",
+        "audience": "https://app.dev-airweave.com/",
+    },
+    "https://api.airweave.ai": {
+        "domain": "airweave.eu.auth0.com",
+        "client_id": "",
+        "audience": "https://app.airweave.ai/",
+    },
+}
+
+
+def resolve_auth0_config(base_url: str) -> dict:
+    """Resolve Auth0 configuration for a given API base URL.
+
+    Checks AIRWEAVE_AUTH0_DOMAIN / _CLIENT_ID / _AUDIENCE env vars first,
+    then falls back to the built-in mapping.
+    """
+    from airweave_cli.lib.output import output_error
+
+    domain = os.environ.get("AIRWEAVE_AUTH0_DOMAIN")
+    client_id = os.environ.get("AIRWEAVE_AUTH0_CLIENT_ID")
+    audience = os.environ.get("AIRWEAVE_AUTH0_AUDIENCE")
+    if domain and client_id and audience:
+        return {"domain": domain, "client_id": client_id, "audience": audience}
+
+    cfg = AUTH0_CONFIGS.get(base_url.rstrip("/"))
+    if cfg and cfg["client_id"]:
+        return cfg
+
+    output_error(
+        f"No Auth0 configuration for {base_url}. "
+        "Use --api-key to log in with a key, or set AIRWEAVE_AUTH0_DOMAIN, "
+        "AIRWEAVE_AUTH0_CLIENT_ID, and AIRWEAVE_AUTH0_AUDIENCE env vars.",
+        code="no_auth0_config",
+    )
+    return {}
+
 
 def load_config() -> Dict[str, Any]:
     if not CONFIG_PATH.exists():

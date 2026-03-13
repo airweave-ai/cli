@@ -36,6 +36,7 @@ typer = {version = "^0.12", extras = ["all"]}
 rich = "^13"
 questionary = "^2.1"
 airweave-sdk = ">=0.9"
+httpx = ">=0.24"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
