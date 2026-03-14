@@ -17,7 +17,7 @@ AUTH0_CONFIGS = {
         "audience": "https://app.dev-airweave.com/",
     },
     "https://api.airweave.ai": {
-        "domain": "airweave.eu.auth0.com",
+        "domain": "airweave.us.auth0.com",
         "client_id": "HgVX5NneBER4VgGNQD0NKpyWBaPE2JMs",
         "audience": "https://app.airweave.ai/",
     },
