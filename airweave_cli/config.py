@@ -11,11 +11,6 @@ CONFIG_PATH = CONFIG_DIR / "config.json"
 DEFAULT_BASE_URL = "https://api.airweave.ai"
 
 AUTH0_CONFIGS = {
-    "https://api.dev-airweave.com": {
-        "domain": "airweave-dev.eu.auth0.com",
-        "client_id": "o83t21A8QlD3okF7mq27Vm2xVV0Ual51",
-        "audience": "https://app.dev-airweave.com/",
-    },
     "https://api.airweave.ai": {
         "domain": "airweave.us.auth0.com",
         "client_id": "HgVX5NneBER4VgGNQD0NKpyWBaPE2JMs",
