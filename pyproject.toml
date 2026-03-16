@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "airweave-cli"
-version = "0.1.8"
+version = "0.1.9"
 description = "The Airweave CLI for developers and AI agents."
 readme = "README.md"
 license = "MIT"
@@ -29,7 +29,7 @@ Repository = "https://github.com/airweave-ai/cli"
 
 [tool.poetry.dependencies]
 python = "^3.9"
-typer = {version = "^0.12", extras = ["all"]}
+typer = ">=0.15"
 rich = "^13"
 questionary = "^2.1"
 airweave-sdk = ">=0.9"
