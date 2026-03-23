@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any, Dict, Optional
 
 import typer
@@ -16,8 +17,30 @@ stderr = Console(stderr=True)
 stdout = Console()
 
 
+class SearchMode(str, Enum):
+    instant = "instant"
+    classic = "classic"
+    agentic = "agentic"
+
+
 def _get_opts(ctx: typer.Context) -> Dict[str, Any]:
     return ctx.ensure_object(dict)
+
+
+def _build_request_body(
+    mode: SearchMode,
+    query: str,
+    limit: int,
+    offset: int,
+) -> Dict[str, Any]:
+    """Build the request body for the given search mode."""
+    if mode == SearchMode.agentic:
+        body: Dict[str, Any] = {"query": query}
+        if limit != 10:
+            body["limit"] = limit
+        return body
+
+    return {"query": query, "limit": limit, "offset": offset}
 
 
 def _render_results(response: Any) -> None:
@@ -26,31 +49,43 @@ def _render_results(response: Any) -> None:
         stderr.print("[yellow]No results found.[/yellow]")
         return
 
-    completion = response.get("completion")
-    if completion:
-        stdout.print(Panel(Markdown(completion), title="Answer", border_style="green"))
-        stdout.print()
-
     for i, result in enumerate(results, 1):
-        meta = result.get("system_metadata") or {}
-        source = meta.get("source_name") or result.get("source_name", "unknown")
-        score = result.get("score")
+        meta = result.get("airweave_system_metadata") or {}
+        source = meta.get("source_name", "unknown")
+        score = result.get("relevance_score")
         name = result.get("name", "")
-        content = result.get("textual_representation") or result.get("md_content", "")
-        source_fields = result.get("source_fields") or {}
-        url = source_fields.get("web_url") or source_fields.get("url") or result.get("url")
+        content = result.get("textual_representation", "")
+        web_url = result.get("web_url")
+        url = web_url or result.get("url")
+
+        # Breadcrumb path
+        breadcrumbs = result.get("breadcrumbs") or []
+        if breadcrumbs:
+            path = " > ".join(bc.get("name", "") for bc in breadcrumbs)
+        else:
+            path = ""
 
         title_parts = [f"[bold]#{i}[/bold]  {source}"]
         if score is not None:
             title_parts.append(f"[dim]score={score:.3f}[/dim]")
         title = Text.from_markup("  ".join(title_parts))
 
-        snippet = content[:500] + ("..." if len(content) > 500 else "") if content else ""
-        body = Markdown(snippet) if snippet else Text.from_markup("[dim]no content[/dim]")
+        # Build body: name header + breadcrumb path + content snippet
+        body_parts = []
+        if name:
+            body_parts.append(f"**{name}**")
+        if path:
+            body_parts.append(f"_{path}_")
+        if content:
+            snippet = content[:500] + ("..." if len(content) > 500 else "")
+            body_parts.append(snippet)
+
+        if body_parts:
+            body = Markdown("\n\n".join(body_parts))
+        else:
+            body = Text.from_markup("[dim]no content[/dim]")
 
         subtitle = url or None
-        if name and not snippet:
-            body = Text(name)
 
         stdout.print(Panel(body, title=title, subtitle=subtitle, border_style="blue"))
 
@@ -61,15 +96,27 @@ def search(
     collection: Optional[str] = typer.Option(
         None, "--collection", "-c", help="Collection readable_id."
     ),
+    mode: SearchMode = typer.Option(
+        SearchMode.classic, "--mode", "-m", help="Search mode: instant, classic, or agentic."
+    ),
     top_k: int = typer.Option(10, "--top-k", "-k", help="Number of results to return."),
+    offset: int = typer.Option(0, "--offset", help="Number of results to skip (instant/classic)."),
 ) -> None:
-    """Search a collection. This is the core command.
+    """Search a collection.
+
+    Three search modes are available:
+
+    - instant:  Direct vector search. Fastest, best for simple lookups.
+    - classic:  AI-optimized search with LLM-generated search plans. (default)
+    - agentic:  Full agent loop that iteratively searches and reasons.
 
     Examples:
 
         $ airweave search "how does auth work?"
 
-        $ airweave search "deploy steps" --json | jq '.results[0]'
+        $ airweave search "deploy steps" --mode instant --top-k 5
+
+        $ airweave search "quarterly revenue" --mode agentic --json | jq '.results[0]'
     """
     opts = _get_opts(ctx)
     json_flag = opts.get("json", False)
@@ -78,11 +125,13 @@ def search(
     coll = resolve_collection(collection)
     client = get_http_client()
 
+    body = _build_request_body(mode, query, top_k, offset)
+
     try:
         with with_spinner("Searching...", "Search complete", "Search failed", quiet=quiet):
             resp = client.post(
-                f"/collections/{coll}/search",
-                json={"query": query, "limit": top_k},
+                f"/collections/{coll}/search/{mode.value}",
+                json=body,
             )
             resp.raise_for_status()
             response = resp.json()
