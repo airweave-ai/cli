@@ -56,19 +56,32 @@ Or set it during `airweave auth login`.
 ### Search
 
 ```sh
-airweave search "<query>" --collection <id> --top-k 5 --format json
+airweave search "<query>" --collection <id> --mode classic --top-k 5
 ```
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--collection` | `-c` | `$AIRWEAVE_COLLECTION` | Collection readable ID |
+| `--mode` | `-m` | `classic` | Search mode: `instant`, `classic`, or `agentic` |
 | `--top-k` | `-k` | `10` | Number of results |
-| `--format` | `-f` | `json` | Output format: `json` or `text` |
+| `--offset` | | `0` | Results to skip (instant/classic only) |
 
-JSON output (default) writes pure JSON to stdout — nothing else. Pipe it:
+Three search modes:
+
+- **instant** — Direct vector search. Fastest, best for simple lookups.
+- **classic** — AI-optimized search with LLM-generated search plans. *(default)*
+- **agentic** — Full agent loop that iteratively searches and reasons over your data.
 
 ```sh
-airweave search "query" -c my-collection | jq '.results[0].md_content'
+airweave search "error logs" --mode instant
+airweave search "how does auth work?"                  # classic (default)
+airweave search "summarize Q4 decisions" --mode agentic
+```
+
+Pipe it:
+
+```sh
+airweave search "query" -c my-collection | jq '.results[0].textual_representation'
 ```
 
 ### Auth
@@ -115,10 +128,10 @@ export AIRWEAVE_BASE_URL="https://api.airweave.ai"  # optional
 
 ```sh
 # Get the top result's content
-airweave search "how to reset password" | jq -r '.results[0].md_content'
+airweave search "how to reset password" | jq -r '.results[0].textual_representation'
 
-# Get the AI-generated answer
-airweave search "what is our refund policy" | jq -r '.completion'
+# Get the top result's source URL
+airweave search "what is our refund policy" | jq -r '.results[0].web_url'
 
 # List collection IDs
 airweave collections list | jq -r '.[].readable_id'
