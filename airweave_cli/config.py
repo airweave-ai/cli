@@ -149,7 +149,7 @@ def get_http_client():
     else:
         output_error("No credentials found. Run: airweave auth login", code="no_credentials")
 
-    return httpx.Client(base_url=base_url, headers=headers, timeout=30)
+    return httpx.Client(base_url=base_url, headers=headers, timeout=600)
 
 
 def get_client():

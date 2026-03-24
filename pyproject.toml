@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "airweave-cli"
-version = "0.1.10"
+version = "0.1.11"
 description = "The Airweave CLI for developers and AI agents."
 readme = "README.md"
 license = "MIT"
