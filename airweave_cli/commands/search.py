@@ -26,8 +26,30 @@ class SearchMode(str, Enum):
     agentic = "agentic"
 
 
+class RetrievalStrategy(str, Enum):
+    hybrid = "hybrid"
+    neural = "neural"
+    keyword = "keyword"
+
+
 def _get_opts(ctx: typer.Context) -> Dict[str, Any]:
     return ctx.ensure_object(dict)
+
+
+def _parse_filter(filter_json: Optional[str]) -> Optional[list]:
+    """Parse a JSON filter string into a list of filter groups."""
+    if not filter_json:
+        return None
+    try:
+        parsed = json.loads(filter_json)
+        if isinstance(parsed, dict):
+            return [parsed]
+        return parsed
+    except json.JSONDecodeError as e:
+        from airweave_cli.lib.output import output_error
+
+        output_error(f"Invalid --filter JSON: {e}", code="invalid_filter")
+        return None  # unreachable
 
 
 def _build_request_body(
@@ -36,15 +58,24 @@ def _build_request_body(
     limit: int,
     offset: int,
     thinking: bool = False,
+    retrieval_strategy: Optional[RetrievalStrategy] = None,
+    filter_groups: Optional[list] = None,
 ) -> Dict[str, Any]:
     """Build the request body for the given search mode."""
     if mode == SearchMode.agentic:
         body: Dict[str, Any] = {"query": query, "thinking": thinking}
         if limit != 10:
             body["limit"] = limit
+        if filter_groups:
+            body["filter"] = filter_groups
         return body
 
-    return {"query": query, "limit": limit, "offset": offset}
+    body: Dict[str, Any] = {"query": query, "limit": limit, "offset": offset}
+    if mode == SearchMode.instant and retrieval_strategy:
+        body["retrieval_strategy"] = retrieval_strategy.value
+    if filter_groups:
+        body["filter"] = filter_groups
+    return body
 
 
 def _render_results(response: Any) -> None:
@@ -202,6 +233,12 @@ def search(
     top_k: int = typer.Option(10, "--top-k", "-k", help="Number of results to return."),
     offset: int = typer.Option(0, "--offset", help="Number of results to skip (instant/classic)."),
     thinking: bool = typer.Option(False, "--thinking", "-t", help="Enable extended thinking (agentic only)."),
+    retrieval_strategy: Optional[RetrievalStrategy] = typer.Option(
+        None, "--strategy", "-s", help="Retrieval strategy (instant only): hybrid, neural, keyword."
+    ),
+    filter_json: Optional[str] = typer.Option(
+        None, "--filter", "-f", help='Filter as JSON, e.g. \'{"conditions": [{"field": "airweave_system_metadata.source_name", "operator": "equals", "value": "slack"}]}\'.'
+    ),
 ) -> None:
     """Search a collection.
 
@@ -215,9 +252,11 @@ def search(
 
         $ airweave search "how does auth work?"
 
-        $ airweave search "deploy steps" --mode instant --top-k 5
+        $ airweave search "deploy steps" --mode instant --strategy keyword
 
         $ airweave search "quarterly revenue" --mode agentic --thinking
+
+        $ airweave search "bugs" --filter '{"conditions": [{"field": "airweave_system_metadata.source_name", "operator": "equals", "value": "jira"}]}'
     """
     opts = _get_opts(ctx)
     json_flag = opts.get("json", False)
@@ -226,7 +265,13 @@ def search(
     coll = resolve_collection(collection)
     client = get_http_client()
 
-    body = _build_request_body(mode, query, top_k, offset, thinking=thinking)
+    filter_groups = _parse_filter(filter_json)
+    body = _build_request_body(
+        mode, query, top_k, offset,
+        thinking=thinking,
+        retrieval_strategy=retrieval_strategy,
+        filter_groups=filter_groups,
+    )
 
     # Agentic mode uses the streaming endpoint for real-time progress
     if mode == SearchMode.agentic:
