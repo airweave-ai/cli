@@ -138,11 +138,12 @@ def _render_stream_event(event: Dict[str, Any]) -> None:
         text = event.get("text") or event.get("thinking") or ""
         diag = event.get("diagnostics") or {}
         iteration = diag.get("iteration", "?")
-        snippet = text[:120].replace("\n", " ")
+        snippet = text[:100].replace("\n", " ")
+        label = f"  [yellow]◆[/yellow] Thinking (iter {iteration})"
         if snippet:
-            stderr.print(f"  [yellow]◆[/yellow] Thinking (iter {iteration}){duration_str}: {snippet}...")
+            stderr.print(f"{label}{duration_str}: {snippet}...")
         else:
-            stderr.print(f"  [yellow]◆[/yellow] Thinking (iter {iteration}){duration_str}")
+            stderr.print(f"{label}{duration_str}")
 
     elif event_type == "tool_call":
         tool = event.get("tool_name", "unknown")
@@ -154,7 +155,8 @@ def _render_stream_event(event: Dict[str, Any]) -> None:
         diag = event.get("diagnostics") or {}
         in_count = diag.get("input_count", "?")
         out_count = diag.get("output_count", "?")
-        stderr.print(f"  [magenta]⇅[/magenta] Reranking: {in_count} → {out_count} results{duration_str}")
+        label = f"  [magenta]⇅[/magenta] Reranking: {in_count} → {out_count}"
+        stderr.print(f"{label} results{duration_str}")
 
     elif event_type == "error":
         msg = event.get("message", "Unknown error")
@@ -230,14 +232,23 @@ def search(
     mode: SearchMode = typer.Option(
         SearchMode.classic, "--mode", "-m", help="Search mode: instant, classic, or agentic."
     ),
-    top_k: int = typer.Option(10, "--top-k", "-k", help="Number of results to return."),
-    offset: int = typer.Option(0, "--offset", help="Number of results to skip (instant/classic)."),
-    thinking: bool = typer.Option(False, "--thinking", "-t", help="Enable extended thinking (agentic only)."),
+    top_k: int = typer.Option(
+        10, "--top-k", "-k", help="Number of results."
+    ),
+    offset: int = typer.Option(
+        0, "--offset", help="Results to skip (instant/classic)."
+    ),
+    thinking: bool = typer.Option(
+        False, "--thinking", "-t",
+        help="Enable extended thinking (agentic only).",
+    ),
     retrieval_strategy: Optional[RetrievalStrategy] = typer.Option(
-        None, "--strategy", "-s", help="Retrieval strategy (instant only): hybrid, neural, keyword."
+        None, "--strategy", "-s",
+        help="Retrieval strategy (instant only): hybrid, neural, keyword.",
     ),
     filter_json: Optional[str] = typer.Option(
-        None, "--filter", "-f", help='Filter as JSON, e.g. \'{"conditions": [{"field": "airweave_system_metadata.source_name", "operator": "equals", "value": "slack"}]}\'.'
+        None, "--filter", "-f",
+        help="Filter as JSON. See docs for format.",
     ),
 ) -> None:
     """Search a collection.
@@ -245,7 +256,7 @@ def search(
     Three search modes are available:
 
     - instant:  Direct vector search. Fastest, best for simple lookups.
-    - classic:  AI-optimized search with LLM-generated search plans. (default)
+    - classic:  AI-optimized with LLM-generated search plans. (default)
     - agentic:  Full agent loop that iteratively searches and reasons.
 
     Examples:
@@ -256,7 +267,7 @@ def search(
 
         $ airweave search "quarterly revenue" --mode agentic --thinking
 
-        $ airweave search "bugs" --filter '{"conditions": [{"field": "airweave_system_metadata.source_name", "operator": "equals", "value": "jira"}]}'
+        $ airweave search "bugs" -f '{"conditions": [...]}'
     """
     opts = _get_opts(ctx)
     json_flag = opts.get("json", False)
