@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from enum import Enum
 from typing import Any, Dict, Optional
 
+import httpx
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
@@ -12,6 +14,7 @@ from rich.text import Text
 from airweave_cli.config import get_http_client, resolve_collection
 from airweave_cli.lib.output import output_error, output_result, should_output_json
 from airweave_cli.lib.spinner import with_spinner
+from airweave_cli.lib.tty import is_interactive
 
 stderr = Console(stderr=True)
 stdout = Console()
@@ -32,10 +35,11 @@ def _build_request_body(
     query: str,
     limit: int,
     offset: int,
+    thinking: bool = False,
 ) -> Dict[str, Any]:
     """Build the request body for the given search mode."""
     if mode == SearchMode.agentic:
-        body: Dict[str, Any] = {"query": query}
+        body: Dict[str, Any] = {"query": query, "thinking": thinking}
         if limit != 10:
             body["limit"] = limit
         return body
@@ -90,6 +94,102 @@ def _render_results(response: Any) -> None:
         stdout.print(Panel(body, title=title, subtitle=subtitle, border_style="blue"))
 
 
+def _render_stream_event(event: Dict[str, Any]) -> None:
+    """Render a single SSE event to stderr during streaming."""
+    event_type = event.get("type", "")
+    duration = event.get("duration_ms")
+    duration_str = f" [dim]({duration}ms)[/dim]" if duration else ""
+
+    if event_type == "started":
+        stderr.print(f"  [blue]▶[/blue] Search started{duration_str}")
+
+    elif event_type == "thinking":
+        text = event.get("text") or event.get("thinking") or ""
+        diag = event.get("diagnostics") or {}
+        iteration = diag.get("iteration", "?")
+        snippet = text[:120].replace("\n", " ")
+        if snippet:
+            stderr.print(f"  [yellow]◆[/yellow] Thinking (iter {iteration}){duration_str}: {snippet}...")
+        else:
+            stderr.print(f"  [yellow]◆[/yellow] Thinking (iter {iteration}){duration_str}")
+
+    elif event_type == "tool_call":
+        tool = event.get("tool_name", "unknown")
+        diag = event.get("diagnostics") or {}
+        iteration = diag.get("iteration", "?")
+        stderr.print(f"  [cyan]⚡[/cyan] Tool: {tool} (iter {iteration}){duration_str}")
+
+    elif event_type == "reranking":
+        diag = event.get("diagnostics") or {}
+        in_count = diag.get("input_count", "?")
+        out_count = diag.get("output_count", "?")
+        stderr.print(f"  [magenta]⇅[/magenta] Reranking: {in_count} → {out_count} results{duration_str}")
+
+    elif event_type == "error":
+        msg = event.get("message", "Unknown error")
+        stderr.print(f"  [red]✗[/red] Error: {msg}")
+
+    elif event_type == "done":
+        results = event.get("results") or []
+        stderr.print(f"  [green]✔[/green] Done — {len(results)} results{duration_str}")
+
+
+def _stream_agentic_search(
+    client: httpx.Client,
+    coll: str,
+    body: Dict[str, Any],
+    json_flag: bool,
+    quiet: bool,
+) -> None:
+    """Execute agentic search via streaming SSE endpoint."""
+    interactive = is_interactive() and not quiet
+
+    with client.stream(
+        "POST",
+        f"/collections/{coll}/search/agentic/stream",
+        json=body,
+    ) as resp:
+        resp.raise_for_status()
+
+        results = []
+        buffer = ""
+
+        for chunk in resp.iter_text():
+            buffer += chunk
+            while "\n\n" in buffer:
+                event_str, buffer = buffer.split("\n\n", 1)
+                for line in event_str.split("\n"):
+                    if line.startswith("data: "):
+                        data = line[6:]
+                        try:
+                            event = json.loads(data)
+                        except json.JSONDecodeError:
+                            continue
+
+                        event_type = event.get("type", "")
+
+                        if interactive:
+                            _render_stream_event(event)
+
+                        if event_type == "done":
+                            results = event.get("results") or []
+
+                        if event_type == "error":
+                            msg = event.get("message", "Search failed")
+                            if not interactive:
+                                output_error(msg, code="search_error", json_flag=json_flag)
+
+    response = {"results": results}
+
+    if should_output_json(json_flag):
+        output_result(response, json_flag=json_flag)
+        return
+
+    if interactive:
+        stdout.print()
+    _render_results(response)
+
+
 def search(
     ctx: typer.Context,
     query: str = typer.Argument(..., help="Search query."),
@@ -101,6 +201,7 @@ def search(
     ),
     top_k: int = typer.Option(10, "--top-k", "-k", help="Number of results to return."),
     offset: int = typer.Option(0, "--offset", help="Number of results to skip (instant/classic)."),
+    thinking: bool = typer.Option(False, "--thinking", "-t", help="Enable extended thinking (agentic only)."),
 ) -> None:
     """Search a collection.
 
@@ -116,7 +217,7 @@ def search(
 
         $ airweave search "deploy steps" --mode instant --top-k 5
 
-        $ airweave search "quarterly revenue" --mode agentic --json | jq '.results[0]'
+        $ airweave search "quarterly revenue" --mode agentic --thinking
     """
     opts = _get_opts(ctx)
     json_flag = opts.get("json", False)
@@ -125,7 +226,17 @@ def search(
     coll = resolve_collection(collection)
     client = get_http_client()
 
-    body = _build_request_body(mode, query, top_k, offset)
+    body = _build_request_body(mode, query, top_k, offset, thinking=thinking)
+
+    # Agentic mode uses the streaming endpoint for real-time progress
+    if mode == SearchMode.agentic:
+        try:
+            _stream_agentic_search(client, coll, body, json_flag, quiet)
+        except typer.Exit:
+            raise
+        except Exception as exc:
+            output_error(str(exc), code="search_error", json_flag=json_flag)
+        return
 
     try:
         with with_spinner("Searching...", "Search complete", "Search failed", quiet=quiet):
