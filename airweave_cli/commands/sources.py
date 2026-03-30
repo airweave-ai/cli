@@ -227,15 +227,17 @@ def sync(
     quiet = opts.get("quiet", False)
 
     client = get_http_client()
-    body: dict = {}
+    params: dict = {}
     if force:
-        body["force_full_sync"] = True
+        params["force_full_sync"] = "true"
 
     try:
         with with_spinner(
             "Starting sync...", "Sync started", "Failed to start sync", quiet=quiet
         ):
-            resp = client.post(f"/source-connections/{source_connection_id}/run", json=body)
+            resp = client.post(
+                f"/source-connections/{source_connection_id}/run", params=params
+            )
             resp.raise_for_status()
             job = resp.json()
     except typer.Exit:
